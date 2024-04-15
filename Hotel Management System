@@ -1,0 +1,192 @@
+package PROJECT;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.Scanner;
+
+public class HBMS {
+    private static final String DB_URL = "URL";
+    private static final String USER = "USERNAME";
+    private static final String PASS = "PASSWORD";
+
+    public static void main(String[] args) {
+        try (Connection conn = DriverManager.getConnection(DB_URL,USER,PASS)) {
+            System.out.println("Connected to the database.");
+            initializeDatabase(conn);
+            Scanner scanner = new Scanner(System.in);
+            int choice = 0;
+            while (choice != 5) {
+                System.out.println("\nHotel Booking System Menu:");
+                System.out.println("1. Add Room");
+                System.out.println("2. Add Guest");
+                System.out.println("3. Make Booking");
+                System.out.println("4. Make Payment");
+                System.out.println("5. Exit");
+                System.out.print("Enter your choice: ");
+                choice = scanner.nextInt();
+                switch (choice) {
+                    case 1:
+                        addRoom(conn);
+                        break;
+                    case 2:
+                        addGuest(conn);
+                        break;
+                    case 3:
+                        makeBooking(conn);
+                        break;
+                    case 4:
+                        makePayment(conn);
+                        break;
+                    case 5:
+                        System.out.println("Exiting...");
+                        break;
+                    default:
+                        System.out.println("Invalid choice. Please enter a number between 1 and 5.");
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println(e.toString());
+        }
+    }
+
+    private static void initializeDatabase(Connection conn) throws SQLException {
+        // Initialize database tables if not exists
+        String createRoomsTableSQL = "CREATE TABLE IF NOT EXISTS Rooms ("
+                + "room_id INT AUTO_INCREMENT PRIMARY KEY,"
+                + "room_number VARCHAR(10) UNIQUE,"
+                + "room_type VARCHAR(50),"
+                + "status ENUM('available', 'occupied') DEFAULT 'available'"
+                + ")";
+        String createGuestsTableSQL = "CREATE TABLE IF NOT EXISTS Guests ("
+                + "guest_id INT AUTO_INCREMENT PRIMARY KEY,"
+                + "guest_name VARCHAR(100),"
+                + "guest_email VARCHAR(100),"
+                + "guest_phone VARCHAR(20)"
+                + ")";
+        String createBookingsTableSQL = "CREATE TABLE IF NOT EXISTS Bookings ("
+                + "booking_id INT AUTO_INCREMENT PRIMARY KEY,"
+                + "room_id INT,"
+                + "guest_id INT,"
+                + "check_in_date DATE,"
+                + "check_out_date DATE,"
+                + "FOREIGN KEY (room_id) REFERENCES Rooms(room_id),"
+                + "FOREIGN KEY (guest_id) REFERENCES Guests(guest_id)"
+                + ")";
+        String createPaymentsTableSQL = "CREATE TABLE IF NOT EXISTS Payments ("
+                + "payment_id INT AUTO_INCREMENT PRIMARY KEY,"
+                + "booking_id INT,"
+                + "amount DECIMAL(10, 2),"
+                + "payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+                + "FOREIGN KEY (booking_id) REFERENCES Bookings(booking_id)"
+                + ")";
+        try (Statement stmt = conn.createStatement()) {
+            stmt.executeUpdate(createRoomsTableSQL);
+            stmt.executeUpdate(createGuestsTableSQL);
+            stmt.executeUpdate(createBookingsTableSQL);
+            stmt.executeUpdate(createPaymentsTableSQL);
+            System.out.println("Database initialized.");
+        }
+    }
+
+    private static void addRoom(Connection conn) throws SQLException {
+        Scanner scanner = new Scanner(System.in);
+        System.out.print("Enter room number: ");
+        String roomNumber = scanner.nextLine();
+        System.out.print("Enter room type: ");
+        String roomType = scanner.nextLine();
+        String insertRoomSQL = "INSERT INTO Rooms (room_number, room_type) VALUES (?, ?)";
+        try (PreparedStatement stmt = conn.prepareStatement(insertRoomSQL)) {
+            stmt.setString(1, roomNumber);
+            stmt.setString(2, roomType);
+            int rowsAffected = stmt.executeUpdate();
+            if (rowsAffected > 0) {
+                System.out.println("Room added successfully.");
+            } else {
+                System.out.println("Failed to add room.");
+            }
+        }
+    }
+
+    private static void addGuest(Connection conn) throws SQLException {
+        Scanner scanner = new Scanner(System.in);
+        System.out.print("Enter guest name: ");
+        String guestName = scanner.nextLine();
+        System.out.print("Enter guest email: ");
+        String guestEmail = scanner.nextLine();
+        System.out.print("Enter guest phone: ");
+        String guestPhone = scanner.nextLine();
+        String insertGuestSQL = "INSERT INTO Guests (guest_name, guest_email, guest_phone) VALUES (?, ?, ?)";
+        try (PreparedStatement stmt = conn.prepareStatement(insertGuestSQL)) {
+            stmt.setString(1, guestName);
+            stmt.setString(2, guestEmail);
+            stmt.setString(3, guestPhone);
+            int rowsAffected = stmt.executeUpdate();
+            if (rowsAffected > 0) {
+                System.out.println("Guest added successfully.");
+            } else {
+                System.out.println("Failed to add guest.");
+            }
+        }
+    }
+
+    private static void makeBooking(Connection conn) throws SQLException {
+        Scanner scanner = new Scanner(System.in);
+        System.out.print("Enter room number: ");
+        String roomNumber = scanner.nextLine();
+        System.out.print("Enter guest ID: ");
+        int guestId = scanner.nextInt();
+        System.out.print("Enter check-in date (YYYY-MM-DD): ");
+        String checkInDate = scanner.next();
+        System.out.print("Enter check-out date (YYYY-MM-DD): ");
+        String checkOutDate = scanner.next();
+        String insertBookingSQL = "INSERT INTO Bookings (room_id, guest_id, check_in_date, check_out_date) VALUES (?, ?, ?, ?)";
+        try (PreparedStatement stmt = conn.prepareStatement(insertBookingSQL)) {
+            stmt.setInt(1, getRoomId(conn, roomNumber));
+            stmt.setInt(2, guestId);
+            stmt.setString(3, checkInDate);
+            stmt.setString(4, checkOutDate);
+            int rowsAffected = stmt.executeUpdate();
+            if (rowsAffected > 0) {
+                System.out.println("Booking made successfully.");
+            } else {
+                System.out.println("Failed to make booking.");
+            }
+        }
+    }
+
+    private static int getRoomId(Connection conn, String roomNumber) throws SQLException {
+        String selectRoomIdSQL = "SELECT room_id FROM Rooms WHERE room_number = ?";
+        try (PreparedStatement stmt = conn.prepareStatement(selectRoomIdSQL)) {
+            stmt.setString(1, roomNumber);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                return rs.getInt("room_id");
+            } else {
+                throw new SQLException("Room not found.");
+            }
+        }
+    }
+
+    private static void makePayment(Connection conn) throws SQLException {
+        Scanner scanner = new Scanner(System.in);
+        System.out.print("Enter booking ID: ");
+        int bookingId = scanner.nextInt();
+        System.out.print("Enter payment amount: ");
+        double amount = scanner.nextDouble();
+        String insertPaymentSQL = "INSERT INTO Payments (booking_id, amount) VALUES (?, ?)";
+        try (PreparedStatement stmt = conn.prepareStatement(insertPaymentSQL)) {
+            stmt.setInt(1, bookingId);
+            stmt.setDouble(2, amount);
+            int rowsAffected = stmt.executeUpdate();
+            if (rowsAffected > 0) {
+                System.out.println("Payment made successfully.");
+            } else {
+                System.out.println("Failed to make payment.");
+            }
+        }
+    }
+}
